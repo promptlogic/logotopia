@@ -4850,6 +4850,7 @@ function animate() {
   }
 
   updateFlight(dt);
+  networkManager.update(dt);
 
   // Animate water waves
   const waveTime = Date.now() * 0.001;
@@ -4914,6 +4915,322 @@ document.getElementById("restart-btn").addEventListener("click", () => {
   clock.start();
   renderer.domElement.requestPointerLock();
 });
+
+// ─── Multiplayer Network Manager ─────────────────────────────
+const networkManager = (function() {
+  const SEND_RATE = 20; // Hz
+  const INTERP_DELAY = 0.1; // 100ms interpolation delay
+  const MAX_SNAPSHOTS = 30;
+
+  // Animation state enum
+  const ANIM = { IDLE: 0, WALK: 1, AIRBORNE: 2, SWIM: 3, PETTING: 4, DANCING: 5 };
+
+  let ws = null;
+  let myId = null;
+  let connected = false;
+  let sendTimer = 0;
+  const remotePlayers = new Map();
+
+  const statusEl = document.getElementById('net-status');
+  const countEl = document.getElementById('player-count');
+
+  function updateHUD() {
+    statusEl.textContent = connected ? 'ONLINE' : 'OFFLINE';
+    statusEl.style.color = connected ? '#00ff88' : '#ff4444';
+    countEl.textContent = (remotePlayers.size + 1) + '/8 PILOTS';
+  }
+
+  function connect() {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(proto + '//' + window.location.host);
+
+    ws.onopen = () => {
+      connected = true;
+      updateHUD();
+    };
+
+    ws.onclose = () => {
+      connected = false;
+      updateHUD();
+      // Remove all remote players
+      for (const [id] of remotePlayers) removeRemotePlayer(id);
+      // Reconnect after 2s
+      setTimeout(connect, 2000);
+    };
+
+    ws.onerror = () => ws.close();
+
+    ws.onmessage = (evt) => {
+      const msg = JSON.parse(evt.data);
+      switch (msg.type) {
+        case 'welcome':
+          myId = msg.id;
+          // Spawn existing players
+          for (const p of msg.players) {
+            spawnRemotePlayer(p.id);
+            if (p.data) pushSnapshot(p.id, p.data);
+          }
+          break;
+        case 'join':
+          spawnRemotePlayer(msg.id);
+          break;
+        case 'leave':
+          removeRemotePlayer(msg.id);
+          break;
+        case 'state':
+          if (!remotePlayers.has(msg.id)) spawnRemotePlayer(msg.id);
+          pushSnapshot(msg.id, msg.data);
+          break;
+        case 'full':
+          console.log('Server full');
+          break;
+      }
+      updateHUD();
+    };
+  }
+
+  function pushSnapshot(id, data) {
+    const rp = remotePlayers.get(id);
+    if (!rp) return;
+    data.t = performance.now() / 1000;
+    rp.snapshots.push(data);
+    if (rp.snapshots.length > MAX_SNAPSHOTS) rp.snapshots.shift();
+  }
+
+  function spawnRemotePlayer(id) {
+    if (remotePlayers.has(id)) return;
+
+    const airplaneObj = createAirplane();
+    scene.add(airplaneObj);
+
+    const pilotObj = createWalkingPilot();
+    // createWalkingPilot already adds to scene, just ensure visible
+    pilotObj.group.visible = false;
+
+    // Clone parachute for remote player
+    const chute = parachuteGroup.clone();
+    chute.visible = false;
+    scene.add(chute);
+
+    remotePlayers.set(id, {
+      airplane: airplaneObj,
+      pilot: pilotObj,
+      parachute: chute,
+      snapshots: [],
+      currentMode: 'flying',
+    });
+  }
+
+  function removeRemotePlayer(id) {
+    const rp = remotePlayers.get(id);
+    if (!rp) return;
+    scene.remove(rp.airplane);
+    scene.remove(rp.pilot.group);
+    scene.remove(rp.parachute);
+    // Dispose geometries/materials
+    rp.airplane.traverse((c) => {
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) { if (c.material.dispose) c.material.dispose(); }
+    });
+    rp.pilot.group.traverse((c) => {
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) { if (c.material.dispose) c.material.dispose(); }
+    });
+    rp.parachute.traverse((c) => {
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) { if (c.material.dispose) c.material.dispose(); }
+    });
+    remotePlayers.delete(id);
+  }
+
+  function sendState() {
+    if (!ws || ws.readyState !== 1) return;
+
+    let data;
+    if (controlMode === 'flying') {
+      data = {
+        mode: 'flying',
+        px: flight.position.x, py: flight.position.y, pz: flight.position.z,
+        qx: flight.quaternion.x, qy: flight.quaternion.y,
+        qz: flight.quaternion.z, qw: flight.quaternion.w,
+        speed: flight.speed,
+        throttle: flight.throttle,
+        boost: flight.boost ? 1 : 0,
+        cheer: pilotCheerTimer > 0 ? 1 : 0,
+      };
+    } else {
+      let animState = ANIM.IDLE;
+      if (player.swimming) animState = ANIM.SWIM;
+      else if (!player.onGround) animState = ANIM.AIRBORNE;
+      else if (player.pettingMoose) animState = ANIM.PETTING;
+      else if (player.nearMaypole && player.speed < 0.1) animState = ANIM.DANCING;
+      else if (player.speed > 0.3) animState = ANIM.WALK;
+
+      data = {
+        mode: 'walking',
+        px: player.position.x, py: player.position.y, pz: player.position.z,
+        yaw: player.yaw,
+        speed: player.speed,
+        anim: animState,
+        chute: player.parachuteOpen ? 1 : 0,
+        swim: player.swimming ? 1 : 0,
+        fika: player.fikaActive ? 1 : 0,
+      };
+    }
+
+    ws.send(JSON.stringify({ type: 'state', data }));
+  }
+
+  function lerpAngle(a, b, t) {
+    let diff = b - a;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    return a + diff * t;
+  }
+
+  function interpolateRemote(rp, now) {
+    const snaps = rp.snapshots;
+    if (snaps.length === 0) return null;
+
+    const renderTime = now - INTERP_DELAY;
+
+    // Find two snapshots to interpolate between
+    let s0 = snaps[0], s1 = snaps[0];
+    for (let i = 0; i < snaps.length - 1; i++) {
+      if (snaps[i + 1].t >= renderTime) {
+        s0 = snaps[i];
+        s1 = snaps[i + 1];
+        break;
+      }
+      s0 = snaps[i];
+      s1 = snaps[i];
+    }
+
+    // If renderTime is past all snapshots, use latest
+    if (renderTime >= snaps[snaps.length - 1].t) {
+      return snaps[snaps.length - 1];
+    }
+
+    const duration = s1.t - s0.t;
+    if (duration <= 0) return s0;
+
+    const t = Math.max(0, Math.min(1, (renderTime - s0.t) / duration));
+
+    // Interpolated result
+    const result = { ...s1 };
+    result.px = s0.px + (s1.px - s0.px) * t;
+    result.py = s0.py + (s1.py - s0.py) * t;
+    result.pz = s0.pz + (s1.pz - s0.pz) * t;
+
+    if (s0.mode === 'flying' && s1.mode === 'flying') {
+      // Slerp quaternion
+      const q0 = new THREE.Quaternion(s0.qx, s0.qy, s0.qz, s0.qw);
+      const q1 = new THREE.Quaternion(s1.qx, s1.qy, s1.qz, s1.qw);
+      q0.slerp(q1, t);
+      result.qx = q0.x; result.qy = q0.y; result.qz = q0.z; result.qw = q0.w;
+    } else if (s0.mode === 'walking' && s1.mode === 'walking') {
+      result.yaw = lerpAngle(s0.yaw, s1.yaw, t);
+    }
+
+    return result;
+  }
+
+  const _walkPhases = new Map(); // track walk animation phase per remote player
+
+  function applyRemoteState(id, rp, dt) {
+    const now = performance.now() / 1000;
+    const s = interpolateRemote(rp, now);
+    if (!s) return;
+
+    if (s.mode === 'flying') {
+      rp.airplane.visible = true;
+      rp.pilot.group.visible = false;
+      rp.parachute.visible = false;
+      rp.airplane.position.set(s.px, s.py, s.pz);
+      rp.airplane.quaternion.set(s.qx, s.qy, s.qz, s.qw);
+      rp.currentMode = 'flying';
+
+      // Pilot cheer animation
+      if (rp.airplane.pilotArmPivot && s.cheer) {
+        rp.airplane.pilotArmPivot.rotation.z = Math.sin(performance.now() * 0.01) * 0.5 - 1.0;
+      } else if (rp.airplane.pilotArmPivot) {
+        rp.airplane.pilotArmPivot.rotation.z = 0;
+      }
+    } else {
+      rp.airplane.visible = false;
+      rp.pilot.group.visible = true;
+      rp.pilot.group.position.set(s.px, s.py, s.pz);
+      rp.pilot.group.rotation.y = s.yaw;
+      rp.currentMode = 'walking';
+
+      // Parachute
+      rp.parachute.visible = !!s.chute;
+      if (s.chute) {
+        rp.parachute.position.set(s.px, s.py, s.pz);
+      }
+
+      // Walk animation
+      let phase = _walkPhases.get(id) || 0;
+      const anim = s.anim || 0;
+
+      if (anim === ANIM.WALK) {
+        phase += dt * 8;
+        const swing = Math.sin(phase) * 0.6;
+        rp.pilot.leftLegPivot.rotation.x = swing;
+        rp.pilot.rightLegPivot.rotation.x = -swing;
+        rp.pilot.leftArmPivot.rotation.x = -swing * 0.5;
+        rp.pilot.rightArmPivot.rotation.x = swing * 0.5;
+        rp.pilot.leftKneePivot.rotation.x = 0;
+        rp.pilot.rightKneePivot.rotation.x = 0;
+      } else if (anim === ANIM.SWIM) {
+        phase += dt * 4;
+        const sw = Math.sin(phase) * 0.8;
+        rp.pilot.leftArmPivot.rotation.x = sw;
+        rp.pilot.rightArmPivot.rotation.x = -sw;
+        rp.pilot.leftLegPivot.rotation.x = sw * 0.4;
+        rp.pilot.rightLegPivot.rotation.x = -sw * 0.4;
+      } else if (anim === ANIM.DANCING) {
+        phase += dt * 6;
+        const d = Math.sin(phase);
+        rp.pilot.leftArmPivot.rotation.x = -2.5 + d * 0.3;
+        rp.pilot.rightArmPivot.rotation.x = -2.5 - d * 0.3;
+        rp.pilot.leftLegPivot.rotation.x = d * 0.2;
+        rp.pilot.rightLegPivot.rotation.x = -d * 0.2;
+      } else {
+        // Idle / airborne / petting — reset limbs
+        rp.pilot.leftLegPivot.rotation.x = 0;
+        rp.pilot.rightLegPivot.rotation.x = 0;
+        rp.pilot.leftArmPivot.rotation.x = 0;
+        rp.pilot.rightArmPivot.rotation.x = 0;
+        rp.pilot.leftKneePivot.rotation.x = 0;
+        rp.pilot.rightKneePivot.rotation.x = 0;
+        phase = 0;
+      }
+      _walkPhases.set(id, phase);
+    }
+  }
+
+  function update(dt) {
+    // Send local state at SEND_RATE
+    sendTimer += dt;
+    if (sendTimer >= 1 / SEND_RATE) {
+      sendTimer = 0;
+      if (state === 'playing') sendState();
+    }
+
+    // Update remote players
+    for (const [id, rp] of remotePlayers) {
+      applyRemoteState(id, rp, dt);
+    }
+  }
+
+  // Auto-connect if served from server (not file://)
+  if (window.location.protocol !== 'file:') {
+    connect();
+  }
+
+  return { update, remotePlayers };
+})();
 
 // ─── Init ────────────────────────────────────────────────────
 resetFlight();
