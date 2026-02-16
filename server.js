@@ -1,9 +1,38 @@
 const express = require('express');
 const http = require('http');
+const { execSync } = require('child_process');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { v4: uuidv4 } = require('uuid');
 
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
+
 const app = express();
+
+// Webhook for auto-deploy on git push
+app.post('/webhook', express.json(), (req, res) => {
+  // Verify signature if secret is set
+  if (WEBHOOK_SECRET) {
+    const sig = req.headers['x-hub-signature-256'] || '';
+    const expected = 'sha256=' + crypto.createHmac('sha256', WEBHOOK_SECRET).update(JSON.stringify(req.body)).digest('hex');
+    if (sig !== expected) return res.status(403).send('Bad signature');
+  }
+
+  // Only deploy on pushes to main
+  if (req.body.ref !== 'refs/heads/main') return res.status(200).send('Ignored');
+
+  console.log('Webhook received — deploying...');
+  res.status(200).send('Deploying');
+
+  try {
+    execSync('git pull origin main && npm install --production', { cwd: __dirname, timeout: 30000 });
+    console.log('Pull complete — restarting via pm2...');
+    execSync('pm2 restart logotopia', { timeout: 10000 });
+  } catch (e) {
+    console.error('Deploy failed:', e.message);
+  }
+});
+
 app.use(express.static(__dirname));
 
 const server = http.createServer(app);
