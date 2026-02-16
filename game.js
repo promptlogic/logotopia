@@ -4912,7 +4912,8 @@ document.getElementById("start-btn").addEventListener("click", () => {
   renderer.domElement.requestPointerLock();
 });
 
-document.getElementById("restart-btn").addEventListener("click", () => {
+function restartGame() {
+  if (state !== "over") return;
   initAudio();
   dom.crashScreen.classList.add("hidden");
   resetFlight();
@@ -4920,7 +4921,11 @@ document.getElementById("restart-btn").addEventListener("click", () => {
   state = "playing";
   clock.start();
   renderer.domElement.requestPointerLock();
-});
+}
+
+document.getElementById("restart-btn").addEventListener("click", restartGame);
+document.addEventListener("keydown", (e) => { if (state === "over") { e.preventDefault(); restartGame(); } });
+document.addEventListener("mousedown", (e) => { if (state === "over" && e.target !== document.getElementById("restart-btn")) restartGame(); });
 
 // ─── Multiplayer Network Manager ─────────────────────────────
 const networkManager = (function() {
