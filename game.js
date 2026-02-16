@@ -4936,7 +4936,7 @@ const networkManager = (function() {
 
   function updateHUD() {
     statusEl.textContent = connected ? 'ONLINE' : 'OFFLINE';
-    statusEl.style.color = connected ? '#00ff88' : '#ff4444';
+    statusEl.style.color = connected ? '#ffffff' : '#ff4444';
     countEl.textContent = (remotePlayers.size + 1) + '/8 PILOTS';
   }
 
