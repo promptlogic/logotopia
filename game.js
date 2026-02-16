@@ -3906,7 +3906,28 @@ function takeScreenshot() {
   screenshotFlashTimer = 0.3;
 }
 
+// ─── Help Screen Toggle ──────────────────────────────────────
+const helpScreen = document.getElementById("help-screen");
+let helpVisible = false;
+
+function toggleHelp() {
+  helpVisible = !helpVisible;
+  helpScreen.classList.toggle("hidden", !helpVisible);
+}
+
 window.addEventListener("keydown", (e) => {
+  // Help overlay: ? to open, any key to close when open
+  if (helpVisible) {
+    toggleHelp();
+    e.preventDefault();
+    return;
+  }
+  if (e.key === "?") {
+    toggleHelp();
+    e.preventDefault();
+    return;
+  }
+
   keys[e.code] = true;
   if (["Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight"].includes(e.code)) {
     e.preventDefault();

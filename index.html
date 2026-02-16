@@ -305,6 +305,7 @@
       <span class="key">F</span><span>Eject &amp; walk on ground</span>
       <span class="key">P</span><span>Take screenshot</span>
       <span class="key">`</span><span>AI Console</span>
+      <span class="key">?</span><span>Show controls</span>
     </div>
     <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
       <label for="api-key-input" style="font-size:12px;color:rgba(255,255,255,0.5);white-space:nowrap;">Anthropic API Key</label>
@@ -313,6 +314,24 @@
     </div>
     <p style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:2px;">Optional — enables AI console (` key). Key is held in memory only, never stored.</p>
     <button id="start-btn">PLAY</button>
+  </div>
+
+  <div id="help-screen" class="overlay hidden" style="background:rgba(0,0,0,0.85);">
+    <h1 style="font-size:36px;">CONTROLS</h1>
+    <div class="controls-grid" style="font-size:14px;gap:6px 20px;">
+      <span class="key">W / S</span><span>Pitch down / up</span>
+      <span class="key">A / D</span><span>Roll left / right</span>
+      <span class="key">Q / E</span><span>Yaw left / right</span>
+      <span class="key">Shift / Ctrl</span><span>Throttle up / down</span>
+      <span class="key">Space</span><span>Boost</span>
+      <span class="key">Mouse</span><span>Look around</span>
+      <span class="key">Click</span><span>Fire machinegun</span>
+      <span class="key">F</span><span>Eject &amp; walk on ground</span>
+      <span class="key">P</span><span>Take screenshot</span>
+      <span class="key">`</span><span>AI Console</span>
+      <span class="key">?</span><span>Toggle this help</span>
+    </div>
+    <p style="margin-top:14px;font-size:12px;color:rgba(255,255,255,0.4);">Press any key to close</p>
   </div>
 
   <div id="crash-screen" class="overlay hidden">
