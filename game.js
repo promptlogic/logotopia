@@ -147,8 +147,8 @@ function getExactGroundHeight(x, z) {
 }
 
 // ─── Water Plane with Surfable Waves ─────────────────────────
-const WATER_SEGS = 256;
-const waterGeo = new THREE.PlaneGeometry(TERRAIN_SIZE * 3, TERRAIN_SIZE * 3, WATER_SEGS, WATER_SEGS);
+const WATER_SEGS = 320;
+const waterGeo = new THREE.PlaneGeometry(TERRAIN_SIZE * 2, TERRAIN_SIZE * 2, WATER_SEGS, WATER_SEGS);
 const waterMat = new THREE.ShaderMaterial({
   uniforms: {
     uTime:     { value: 0.0 },
@@ -175,11 +175,12 @@ const waterMat = new THREE.ShaderMaterial({
       vec2 p0 = position.xy;  // rest position in local XY plane
 
       // Wave components: (dir, amp, k=freq, omega=speed, phase, steep=Q)
+      // Shorter wavelengths (k=0.040, 0.065) put 2-4 crests in the player's view from shore
       vec3 D = vec3(0.0);
-      D += gerstner(normalize(vec2( 1.0,  0.3)), 5.0, 0.008, 1.2, 0.0,  0.60, p0, uTime);
-      D += gerstner(normalize(vec2( 0.7,  0.7)), 3.0, 0.012, 1.8, 2.0,  0.50, p0, uTime);
-      D += gerstner(normalize(vec2( 0.2,  1.0)), 2.0, 0.020, 2.5, 4.5,  0.35, p0, uTime);
-      D += gerstner(normalize(vec2(-0.4,  0.9)), 1.5, 0.035, 3.0, 1.3,  0.20, p0, uTime);
+      D += gerstner(normalize(vec2( 1.0,  0.3)), 6.0, 0.006, 1.0, 0.0,  0.55, p0, uTime);
+      D += gerstner(normalize(vec2( 0.7,  0.7)), 3.0, 0.018, 1.6, 2.0,  0.45, p0, uTime);
+      D += gerstner(normalize(vec2( 0.2,  1.0)), 2.0, 0.040, 2.2, 4.5,  0.30, p0, uTime);
+      D += gerstner(normalize(vec2(-0.4,  0.9)), 1.0, 0.065, 3.0, 1.3,  0.15, p0, uTime);
 
       vec2 pos = p0 + D.xy;   // horizontally displaced position
       float h  = D.z;         // vertical displacement
@@ -190,25 +191,25 @@ const waterMat = new THREE.ShaderMaterial({
       // N.z =  1 - sum(Q * k * A * sin(theta))
       float nx = 0.0, ny = 0.0, nz_term = 0.0;
       {
-        vec2 dir = normalize(vec2( 1.0,  0.3)); float k=0.008, A=5.0, Q=0.60, om=1.2, ph=0.0;
+        vec2 dir = normalize(vec2( 1.0,  0.3)); float k=0.006, A=6.0, Q=0.55, om=1.0, ph=0.0;
         float theta = dot(dir, p0)*k + om*uTime + ph;
         float s=sin(theta), c=cos(theta);
         nx -= k*A*dir.x*c;  ny -= k*A*dir.y*c;  nz_term += Q*k*A*s;
       }
       {
-        vec2 dir = normalize(vec2( 0.7,  0.7)); float k=0.012, A=3.0, Q=0.50, om=1.8, ph=2.0;
+        vec2 dir = normalize(vec2( 0.7,  0.7)); float k=0.018, A=3.0, Q=0.45, om=1.6, ph=2.0;
         float theta = dot(dir, p0)*k + om*uTime + ph;
         float s=sin(theta), c=cos(theta);
         nx -= k*A*dir.x*c;  ny -= k*A*dir.y*c;  nz_term += Q*k*A*s;
       }
       {
-        vec2 dir = normalize(vec2( 0.2,  1.0)); float k=0.020, A=2.0, Q=0.35, om=2.5, ph=4.5;
+        vec2 dir = normalize(vec2( 0.2,  1.0)); float k=0.040, A=2.0, Q=0.30, om=2.2, ph=4.5;
         float theta = dot(dir, p0)*k + om*uTime + ph;
         float s=sin(theta), c=cos(theta);
         nx -= k*A*dir.x*c;  ny -= k*A*dir.y*c;  nz_term += Q*k*A*s;
       }
       {
-        vec2 dir = normalize(vec2(-0.4,  0.9)); float k=0.035, A=1.5, Q=0.20, om=3.0, ph=1.3;
+        vec2 dir = normalize(vec2(-0.4,  0.9)); float k=0.065, A=1.0, Q=0.15, om=3.0, ph=1.3;
         float theta = dot(dir, p0)*k + om*uTime + ph;
         float s=sin(theta), c=cos(theta);
         nx -= k*A*dir.x*c;  ny -= k*A*dir.y*c;  nz_term += Q*k*A*s;
@@ -290,10 +291,10 @@ scene.add(water);
 // Wave parameters — amplitudes/freq/speed/phase must match vertex shader Gerstner constants
 // Note: getWaveHeight() uses vertical component only (amp*sin) as a physics approximation
 const waves = [
-  { dirX: 1.0, dirY: 0.3,  amp: 5.0, freq: 0.008, speed: 1.2,  phase: 0.0 },   // primary swell
-  { dirX: 0.7, dirY: 0.7,  amp: 3.0, freq: 0.012, speed: 1.8,  phase: 2.0 },   // cross-wave
-  { dirX: 0.2, dirY: 1.0,  amp: 2.0, freq: 0.020, speed: 2.5,  phase: 4.5 },   // ripple
-  { dirX:-0.4, dirY: 0.9,  amp: 1.5, freq: 0.035, speed: 3.0,  phase: 1.3 },   // chop
+  { dirX: 1.0, dirY: 0.3,  amp: 6.0, freq: 0.006, speed: 1.0,  phase: 0.0 },   // long swell
+  { dirX: 0.7, dirY: 0.7,  amp: 3.0, freq: 0.018, speed: 1.6,  phase: 2.0 },   // medium swell
+  { dirX: 0.2, dirY: 1.0,  amp: 2.0, freq: 0.040, speed: 2.2,  phase: 4.5 },   // shore wave (visible)
+  { dirX:-0.4, dirY: 0.9,  amp: 1.0, freq: 0.065, speed: 3.0,  phase: 1.3 },   // chop
 ];
 
 function getWaveHeight(x, z, time) {
