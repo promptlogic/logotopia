@@ -265,8 +265,16 @@ const waterMat = new THREE.ShaderMaterial({
       float whitecap = smoothstep(0.45, 0.70, vFoamMask);
       color = mix(color, vec3(1.0, 0.98, 0.95), whitecap * 0.80);
 
+      // Shoreline foam: lapping band near WATER_LEVEL (-40)
+      // shoreDepth: 0 right at waterline, 1 eight units above it
+      float shoreDepth = clamp((vWorldPos.y - (-40.0)) / 8.0, 0.0, 1.0);
+      float shorePulse = sin(vWorldPos.x * 0.04 + vWorldPos.z * 0.03 - uTime * 2.2) * 0.5 + 0.5;
+      float shoreFoam  = (1.0 - smoothstep(0.0, 1.0, shoreDepth)) * shorePulse * 0.65;
+      color = mix(color, vec3(1.0, 1.0, 1.0), shoreFoam);
+
       float alpha = mix(0.60, 0.90, fresnel);
-      alpha = max(alpha, whitecap * 0.95);   // foam is more opaque
+      alpha = max(alpha, whitecap * 0.95);
+      alpha = max(alpha, shoreFoam * 0.9);
       gl_FragColor = vec4(color, alpha);
     }
   `,
