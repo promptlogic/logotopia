@@ -236,12 +236,12 @@ water.rotation.x = -Math.PI / 2;
 water.position.y = -40;
 scene.add(water);
 
-// Wave parameters
+// Wave parameters — must match vertex shader Gerstner constants
 const waves = [
-  { dirX: 1.0, dirY: 0.3,  amp: 3.5, freq: 0.008, speed: 1.2,  phase: 0 },     // primary swell
-  { dirX: 0.7, dirY: 0.7,  amp: 2.0, freq: 0.012, speed: 1.8,  phase: 2.0 },   // cross-wave
-  { dirX: 0.2, dirY: 1.0,  amp: 1.5, freq: 0.02,  speed: 2.5,  phase: 4.5 },   // ripple
-  { dirX: -0.4, dirY: 0.9, amp: 1.0, freq: 0.035, speed: 3.0,  phase: 1.3 },   // chop
+  { dirX: 1.0, dirY: 0.3,  amp: 5.0, freq: 0.008, speed: 1.2,  phase: 0.0 },   // primary swell
+  { dirX: 0.7, dirY: 0.7,  amp: 3.0, freq: 0.012, speed: 1.8,  phase: 2.0 },   // cross-wave
+  { dirX: 0.2, dirY: 1.0,  amp: 2.0, freq: 0.020, speed: 2.5,  phase: 4.5 },   // ripple
+  { dirX:-0.4, dirY: 0.9,  amp: 1.5, freq: 0.035, speed: 3.0,  phase: 1.3 },   // chop
 ];
 
 function getWaveHeight(x, z, time) {
