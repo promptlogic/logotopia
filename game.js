@@ -4200,13 +4200,13 @@ function resetFlight() {
   flight.quaternion.setFromEuler(new THREE.Euler(0, AIRPORT_HEADING, 0, "YXZ"));
   flight.boost = false;
 
-  // Start pilot on ground facing airport, maypole and village visible
+  // Start pilot on the shore facing the ocean
   controlMode = "walking";
-  const startX = 220, startZ = -245;
+  const startX = 100, startZ = -300;
   const startY = getExactGroundHeight(startX, startZ);
   player.position.set(startX, startY, startZ);
   player.velocity.set(0, 0, 0);
-  player.yaw = 2.6; // face toward airport
+  player.yaw = Math.PI; // face west toward the ocean
   player.speed = 0;
   player.onGround = true;
   player.walkPhase = 0;
