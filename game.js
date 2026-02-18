@@ -147,18 +147,89 @@ function getExactGroundHeight(x, z) {
 }
 
 // ─── Water Plane with Surfable Waves ─────────────────────────
-const WATER_SEGS = 200;
+const WATER_SEGS = 80;
 const waterGeo = new THREE.PlaneGeometry(TERRAIN_SIZE * 3, TERRAIN_SIZE * 3, WATER_SEGS, WATER_SEGS);
-// Store original vertex positions for wave animation
-const waterBasePositions = new Float32Array(waterGeo.attributes.position.array);
-// Deep Nordic lake
-const waterMat = new THREE.MeshPhongMaterial({
-  color: 0x1a5a7e,
-  specular: 0x88bbdd,
-  shininess: 60,
+const waterMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uTime:     { value: 0.0 },
+    uSunDir:   { value: new THREE.Vector3(500, 800, 300).normalize() },
+    uSkyColor: { value: new THREE.Color(0x8ec8e8) },
+  },
+  vertexShader: `
+    uniform float uTime;
+    varying vec3 vWorldPos;
+    varying vec3 vWorldNormal;
+
+    float waveH(vec2 pos) {
+      float h = 0.0;
+      h += 3.5 * sin(dot(pos, vec2( 1.0,  0.3)) * 0.008 + uTime * 1.2 + 0.0);
+      h += 2.0 * sin(dot(pos, vec2( 0.7,  0.7)) * 0.012 + uTime * 1.8 + 2.0);
+      h += 1.5 * sin(dot(pos, vec2( 0.2,  1.0)) * 0.020 + uTime * 2.5 + 4.5);
+      h += 1.0 * sin(dot(pos, vec2(-0.4,  0.9)) * 0.035 + uTime * 3.0 + 1.3);
+      return h;
+    }
+
+    void main() {
+      vec2 pos = position.xy;
+      float h = waveH(pos);
+
+      // Finite-difference surface normal
+      float eps = 1.0;
+      vec3 localNorm = normalize(vec3(
+        waveH(pos + vec2(-eps, 0.0)) - waveH(pos + vec2(eps, 0.0)),
+        waveH(pos + vec2(0.0, -eps)) - waveH(pos + vec2(0.0, eps)),
+        2.0 * eps
+      ));
+
+      vWorldNormal = normalize(mat3(modelMatrix) * localNorm);
+      vec4 worldPos4 = modelMatrix * vec4(pos.x, pos.y, h, 1.0);
+      vWorldPos = worldPos4.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPos4;
+    }
+  `,
+  fragmentShader: `
+    uniform float uTime;
+    uniform vec3 uSunDir;
+    uniform vec3 uSkyColor;
+    varying vec3 vWorldPos;
+    varying vec3 vWorldNormal;
+
+    void main() {
+      vec3 N = normalize(vWorldNormal);
+      vec3 V = normalize(cameraPosition - vWorldPos);
+
+      // Micro-ripple: perturb normal with high-freq procedural waves
+      vec2 uv1 = vWorldPos.xz * 0.08 + uTime * vec2(0.25, 0.12);
+      vec2 uv2 = vWorldPos.xz * 0.13 - uTime * vec2(0.15, 0.22);
+      float nx = (sin(uv1.x * 6.283) + sin(uv2.x * 6.283 + 1.1)) * 0.02;
+      float nz = (cos(uv1.y * 6.283) + cos(uv2.y * 6.283 - 0.7)) * 0.02;
+      N = normalize(N + vec3(nx, 0.0, nz));
+
+      // Fresnel: glancing angle shows sky, overhead shows depth
+      float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+      fresnel = mix(0.05, 0.85, fresnel);
+
+      // Depth color: navy trough (-48) -> teal crest (-32)
+      float waveT = clamp((vWorldPos.y + 48.0) / 16.0, 0.0, 1.0);
+      vec3 deepColor    = vec3(0.06, 0.22, 0.38);
+      vec3 shallowColor = vec3(0.16, 0.50, 0.60);
+      vec3 waterColor   = mix(deepColor, shallowColor, waveT);
+
+      // Blend water and sky by Fresnel
+      vec3 color = mix(waterColor, uSkyColor, fresnel);
+
+      // Specular sun glint
+      vec3 H = normalize(uSunDir + V);
+      float spec = pow(max(dot(N, H), 0.0), 256.0);
+      color += vec3(1.0, 0.97, 0.88) * spec * 1.2;
+
+      float alpha = mix(0.60, 0.90, fresnel);
+      gl_FragColor = vec4(color, alpha);
+    }
+  `,
   transparent: true,
-  opacity: 0.75,
-  flatShading: true,
+  depthWrite: false,
+  side: THREE.FrontSide,
 });
 const water = new THREE.Mesh(waterGeo, waterMat);
 water.rotation.x = -Math.PI / 2;
@@ -182,16 +253,6 @@ function getWaveHeight(x, z, time) {
   return h;
 }
 
-function animateWaves(time) {
-  const positions = waterGeo.attributes.position.array;
-  for (let i = 0; i < positions.length; i += 3) {
-    const bx = waterBasePositions[i];
-    const by = waterBasePositions[i + 1];
-    positions[i + 2] = getWaveHeight(bx, by, time);
-  }
-  waterGeo.attributes.position.needsUpdate = true;
-  waterGeo.computeVertexNormals();
-}
 
 // ─── Sun Orb (visible golden sun in the sky) ────────────────
 const sunGeo = new THREE.SphereGeometry(120, 16, 12);
@@ -4873,10 +4934,9 @@ function animate() {
   updateFlight(dt);
   networkManager.update(dt);
 
-  // Animate water waves
+  // Animate water waves (GPU shader)
   const waveTime = Date.now() * 0.001;
-  animateWaves(waveTime);
-  water.material.opacity = 0.65 + Math.sin(waveTime) * 0.08;
+  water.material.uniforms.uTime.value = waveTime;
 
   // Bob boats on waves
   for (const b of boats) {
