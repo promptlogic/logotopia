@@ -1,0 +1,66 @@
+export default [
+  {
+    files: ["**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: {
+        // Browser
+        window: "readonly",
+        document: "readonly",
+        console: "readonly",
+        requestAnimationFrame: "readonly",
+        cancelAnimationFrame: "readonly",
+        setTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        clearTimeout: "readonly",
+        fetch: "readonly",
+        WebSocket: "readonly",
+        AudioContext: "readonly",
+        OscillatorNode: "readonly",
+        GainNode: "readonly",
+        BiquadFilterNode: "readonly",
+        performance: "readonly",
+        alert: "readonly",
+        confirm: "readonly",
+        Image: "readonly",
+        HTMLElement: "readonly",
+        MouseEvent: "readonly",
+        KeyboardEvent: "readonly",
+        Event: "readonly",
+        navigator: "readonly",
+        location: "readonly",
+        localStorage: "readonly",
+        // Node
+        process: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+        Buffer: "readonly",
+        // Libraries
+        THREE: "readonly",
+      },
+    },
+    rules: {
+      "no-undef": "error",
+      "no-unused-vars": ["warn", { args: "none", varsIgnorePattern: "^_" }],
+      "no-constant-condition": "warn",
+      "no-unreachable": "warn",
+      "no-dupe-keys": "error",
+      "no-duplicate-case": "error",
+      "eqeqeq": ["warn", "smart"],
+    },
+  },
+  {
+    files: ["server.js", "screenshot.js", "snap.js", "watch-screenshots.js"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: {
+        require: "readonly",
+        module: "readonly",
+        exports: "readonly",
+        URL: "readonly",
+      },
+    },
+  },
+];

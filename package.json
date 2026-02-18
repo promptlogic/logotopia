@@ -2,12 +2,18 @@
   "name": "logotopia",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js & sleep 1 && browser-sync start --proxy localhost:3000 --ws --files '*.html,*.js,*.css' --no-open",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "express": "^4.21.0",
     "uuid": "^10.0.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "browser-sync": "^3.0.4",
+    "eslint": "^10.0.0"
   }
 }
